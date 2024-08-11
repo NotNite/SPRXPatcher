@@ -1,0 +1,13 @@
+# IDEs
+.idea/
+.vs/
+.vscode/
+
+# Compiled output
+bin/
+obj/
+*.o
+
+# Local data
+*.user
+local/
