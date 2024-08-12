@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics.CodeAnalysis;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace SPRXPatcher.Elf;
@@ -71,12 +72,12 @@ public class ElfFile {
         return (uint) (section.PhysicalAddress + offset);
     }
 
-    public void Write(Stream stream) {
+    public byte[] Write(Stream stream) {
         using var bw = new BigBinaryWriter(stream);
-        this.Write(bw);
+        return this.Write(bw);
     }
 
-    public void Write(BigBinaryWriter bw) {
+    public byte[] Write(BigBinaryWriter bw) {
         this.Header.Write(bw); // We'll go back and update the header later
 
         {
@@ -161,6 +162,38 @@ public class ElfFile {
         // Update the header with the program header offset
         bw.BaseStream.Seek(0, SeekOrigin.Begin);
         this.Header.Write(bw);
+
+        var sha1 = SHA1.Create();
+        using var hashMs = new MemoryStream();
+        using var hashBw = new BigBinaryWriter(hashMs);
+        void UpdateSha1(byte[] data) => hashBw.Write(data);
+
+        foreach (var programHeader in this.ProgramHeaders) {
+            var type = BitConverter.GetBytes((uint) programHeader.Type);
+            var flags = BitConverter.GetBytes((uint) programHeader.Flags);
+            Array.Reverse(type);
+            Array.Reverse(flags);
+            UpdateSha1(type);
+            UpdateSha1(flags);
+
+            if (programHeader.Type == ElfProgramHeader.ProgramType.Load && programHeader.MemorySize != 0) {
+                var vaddr = BitConverter.GetBytes(programHeader.VirtualAddress);
+                var memsz = BitConverter.GetBytes(programHeader.MemorySize);
+                Array.Reverse(vaddr);
+                Array.Reverse(memsz);
+                UpdateSha1(vaddr);
+                UpdateSha1(memsz);
+
+                var br = new BigBinaryReader(bw.BaseStream);
+                br.BaseStream.Seek((long) programHeader.Offset, SeekOrigin.Begin);
+                var data = br.ReadBytes((int) programHeader.FileSize);
+                UpdateSha1(data);
+            }
+        }
+
+        bw.BaseStream.Seek(0, SeekOrigin.End);
+
+        return sha1.ComputeHash(hashMs.ToArray());
     }
 
     private void SeekToAlignment(BigBinaryWriter bw, ulong alignment) {

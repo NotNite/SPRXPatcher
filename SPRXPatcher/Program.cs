@@ -1,4 +1,5 @@
-﻿using SPRXPatcher.Elf;
+﻿using System.Text;
+using SPRXPatcher.Elf;
 
 if (args.Length != 3) {
     Console.WriteLine("Usage: SPRXPatcher <input.elf> </path/to/sprx> <output.elf>");
@@ -18,6 +19,9 @@ var elf = new ElfFile(inputStream);
 elf.SprxPath = sprx;
 
 using var outputStream = File.Create(output);
-elf.Write(outputStream);
+var ppuHash = elf.Write(outputStream);
 
 Console.WriteLine("Wrote patched ELF to " + output);
+
+var ppuHashHex = BitConverter.ToString(ppuHash).Replace("-", string.Empty).ToLower();
+Console.WriteLine("PPU hash: " + ppuHashHex);
